@@ -82,7 +82,7 @@ def main():
     print("\nRevenue trends over time (monthly growth):")
     print(analyzer.revenue_monthly_growth())
 
-    utils.create_visualizations()
+    create_visualizations(analyzer)
 
 
 if __name__ == "__main__":
