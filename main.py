@@ -1,0 +1,2 @@
+#komment
+#main.py
