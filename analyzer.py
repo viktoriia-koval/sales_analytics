@@ -1,93 +1,140 @@
 ﻿import pandas as pd
-from models import EntityFactory
 
 
 class SalesAnalyzer:
     def __init__(self, csv_path: str):
-        # Store CSV path
         self.csv_path = csv_path
         self.df = None
 
     def load_data(self):
-        """Load data from CSV."""
         self.df = pd.read_csv(self.csv_path)
 
-        # Print basic structure and stats
-        print("Info about the data:")
-        print(self.df.info())
-        print("\nStatistical summary:")
-        print(self.df.describe(include="all"))
-
     def clean_data(self):
-        """Clean data: fill missing values and remove invalid rows."""
+        self.df = self.df.drop_duplicates().copy()
 
-        # Remove duplicates
-        self.df.drop_duplicates(inplace=True)
-
-        # Fill missing quantity and unit_price
         if "quantity" in self.df.columns:
-            self.df["quantity"] = self.df["quantity"].fillna(0)
+            self.df["quantity"] = pd.to_numeric(self.df["quantity"], errors="coerce").fillna(0)
         if "unit_price" in self.df.columns:
-            self.df["unit_price"] = self.df["unit_price"].fillna(0.0)
+            self.df["unit_price"] = pd.to_numeric(self.df["unit_price"], errors="coerce").fillna(0)
 
-        # Compute missing order_amount as quantity * unit_price
         if "order_amount" in self.df.columns:
-            mask = self.df["order_amount"].isna()
-            self.df.loc[mask, "order_amount"] = (
-                self.df.loc[mask, "quantity"] * self.df.loc[mask, "unit_price"]
+            self.df["order_amount"] = pd.to_numeric(self.df["order_amount"], errors="coerce")
+            missing_amount = self.df["order_amount"].isna()
+            self.df.loc[missing_amount, "order_amount"] = (
+                self.df.loc[missing_amount, "quantity"] * self.df.loc[missing_amount, "unit_price"]
             )
 
-        # Type conversion
-        self.df["order_date"] = pd.to_datetime(self.df["order_date"], errors="coerce")
-        self.df["order_amount"] = pd.to_numeric(self.df["order_amount"], errors="coerce")
+        if "order_date" in self.df.columns:
+            self.df["order_date"] = pd.to_datetime(self.df["order_date"], errors="coerce")
 
-        # Remove invalid rows: missing date or non-positive amount
-        self.df = self.df[self.df["order_date"].notna() & (self.df["order_amount"] > 0)]
+        self.df = self.df[self.df["order_amount"].notna() & (self.df["order_amount"] > 0)]
+        if "order_date" in self.df.columns:
+            self.df = self.df[self.df["order_date"].notna()]
 
-        # Export cleaned data
-        self.df.to_csv("data/sales_clean.csv", index=False)
-        print("Cleaned data exported: data/sales_clean.csv")
+    def total_revenue(self) -> float:
+        return float(self.df["order_amount"].sum())
 
-    def create_objects(self):
-        """Optional: create objects using EntityFactory."""
-        self.products = []
-        self.customers = []
-        self.orders = []
+    def average_order_value(self) -> float:
+        return float(self.df["order_amount"].mean())
 
-        for _, row in self.df.iterrows():
-            product = EntityFactory.create(
-                entity_type="product",
-                product_id=row["product_name"].__hash__(),
-                name=row["product_name"],
-                category=row["product_category"],
-                base_price=row["unit_price"],
+    def customer_count(self) -> int:
+        return int(self.df["customer_id"].nunique())
+
+    def most_profitable_category(self):
+        category_revenue = (
+            self.df.groupby("product_category", as_index=False)["order_amount"]
+            .sum()
+            .sort_values("order_amount", ascending=False)
+        )
+        return category_revenue.head(1)
+
+    def top_customers_by_ltv_top10(self) -> pd.DataFrame:
+        return (
+            self.df.groupby("customer_id", as_index=False)["order_amount"]
+            .sum()
+            .rename(columns={"order_amount": "lifetime_value"})
+            .sort_values("lifetime_value", ascending=False)
+            .head(10)
+        )
+
+    def repeat_customer_rate(self) -> float:
+        orders_per_customer = self.df.groupby("customer_id")["order_id"].nunique()
+        repeat_customers = (orders_per_customer > 1).sum()
+        total_customers = len(orders_per_customer)
+        if total_customers == 0:
+            return 0.0
+        return float(repeat_customers / total_customers)
+
+    def monthly_sales_trends(self) -> pd.DataFrame:
+        work = self.df.copy()
+        work["year_month"] = work["order_date"].dt.to_period("M").astype(str)
+        return (
+            work.groupby("year_month", as_index=False)
+            .agg(revenue=("order_amount", "sum"), orders=("order_id", "nunique"))
+            .sort_values("year_month")
+        )
+
+    def seasonal_sales_trends(self) -> pd.DataFrame:
+        work = self.df.copy()
+        work["month"] = work["order_date"].dt.month
+        return (
+            work.groupby("month", as_index=False)
+            .agg(revenue=("order_amount", "sum"), orders=("order_id", "nunique"))
+            .sort_values("month")
+        )
+
+    def average_order_size_by_category(self) -> pd.DataFrame:
+        return (
+            self.df.groupby("product_category", as_index=False)
+            .agg(
+                avg_quantity=("quantity", "mean"),
+                avg_order_amount=("order_amount", "mean"),
             )
-            self.products.append(product)
+            .sort_values("avg_order_amount", ascending=False)
+        )
 
-            customer = EntityFactory.create(
-                entity_type="customer",
-                customer_id=row["customer_id"],
-                name=row.get("customer_name", f"Customer {row['customer_id']}"),
-                email=row.get("email", "unknown@example.com"),
-                lifetime_value=0.0,
-            )
-            self.customers.append(customer)
+    def status_percentages(self) -> pd.DataFrame:
+        status_share = (
+            self.df["status"]
+            .fillna("unknown")
+            .value_counts(normalize=True)
+            .mul(100)
+            .reset_index(name="percent") # Series -> DataFrame:
+        )
+        return status_share.sort_values("percent", ascending=False)
 
-            order = EntityFactory.create(
-                entity_type="order",
-                order_id=row["order_id"],
-                order_date=row["order_date"],
-                items=[product],
-                customer=customer,
-                amount=row["order_amount"],
-                status=row.get("status", "completed"),
-            )
-            self.orders.append(order)
+    def order_outliers(self) -> pd.DataFrame:
+        q1 = self.df["order_amount"].quantile(0.25)
+        q3 = self.df["order_amount"].quantile(0.75)
+        
+        iqr = q3 - q1 #Tukey's rule
+        lower = q1 - 1.5 * iqr 
+        upper = q3 + 1.5 * iqr
+        
+        outliers = self.df[(self.df["order_amount"] < lower) | (self.df["order_amount"] > upper)].copy()
+        outliers["outlier_type"] = outliers["order_amount"].apply(
+            lambda x: "small" if x < lower else "large"
+        )
+        return outliers.sort_values("order_amount")
 
-    def total_revenue(self):
-        """Total revenue."""
-        return self.df["order_amount"].sum()
+    def customer_segmentation_by_spending(self) -> pd.DataFrame:
+        ltv = (
+            self.df.groupby("customer_id", as_index=False)["order_amount"]
+            .sum()
+            .rename(columns={"order_amount": "lifetime_value"})
+        )
 
-    def average_order_value(self):
-        """Average order value."""
-        return self.df["order_amount"].mean()
+        q25 = ltv["lifetime_value"].quantile(0.25)
+        q50 = ltv["lifetime_value"].quantile(0.50)
+        q75 = ltv["lifetime_value"].quantile(0.75)
+
+        bins = [float("-inf"), q25, q50, q75, float("inf")]
+        labels = ["low", "mid", "high", "vip"]
+        ltv["spending_tier"] = pd.cut(ltv["lifetime_value"], bins=bins, labels=labels)
+        return ltv.sort_values("lifetime_value", ascending=False)
+
+    def revenue_monthly_growth(self) -> pd.DataFrame:
+        monthly = self.monthly_sales_trends().copy()
+        monthly["monthly_growth_pct"] = monthly["revenue"].pct_change().mul(100)
+        monthly["monthly_growth_abs"] = monthly["revenue"].diff()
+        return monthly

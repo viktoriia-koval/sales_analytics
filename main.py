@@ -50,6 +50,36 @@ def main():
 
     #print(bubble_sorted.head(20))
     #print(pandas_sorted.head(20))
+    
+    print("\nMost profitable category:")
+    print(analyzer.most_profitable_category())
+
+    print("\nTop 10 customers by lifetime value:")
+    print(analyzer.top_customers_by_ltv_top10())
+
+    print("\nRepeat customer rate:")
+    print(f"{analyzer.repeat_customer_rate() * 100:.2f}%")
+
+    print("\nMonthly sales trends:")
+    print(analyzer.monthly_sales_trends())
+
+    print("\nSeasonal sales trends (month-level):")
+    print(analyzer.seasonal_sales_trends())
+
+    print("\nAverage order size by category:")
+    print(analyzer.average_order_size_by_category())
+
+    print("\nOrder status percentages (cancelled/completed/etc):")
+    print(analyzer.status_percentages())
+
+    print("\nOutlier orders (large/small):")
+    print(analyzer.order_outliers()[["order_id", "customer_id", "order_amount", "outlier_type"]])
+
+    print("\nCustomer segmentation by spending tier:")
+    print(analyzer.customer_segmentation_by_spending().head(20))
+
+    print("\nRevenue trends over time (monthly growth):")
+    print(analyzer.revenue_monthly_growth())
 
 
 if __name__ == "__main__":
