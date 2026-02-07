@@ -2,6 +2,7 @@
 
 from analyzer import SalesAnalyzer
 from algorithms import linear_search_numeric, bubble_sort_values
+from utils import create_visualizations 
 
 
 def main():
@@ -50,7 +51,7 @@ def main():
 
     #print(bubble_sorted.head(20))
     #print(pandas_sorted.head(20))
-    
+
     print("\nMost profitable category:")
     print(analyzer.most_profitable_category())
 
@@ -80,6 +81,8 @@ def main():
 
     print("\nRevenue trends over time (monthly growth):")
     print(analyzer.revenue_monthly_growth())
+
+    utils.create_visualizations()
 
 
 if __name__ == "__main__":
